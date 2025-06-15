@@ -5,6 +5,7 @@ import logging
 import sys
 import os
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="cloudwatch-logstream-cleaner",
@@ -22,6 +23,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 def delete_stream(client, log_group_name, log_stream_name):
     """Delete a single log stream and log the result."""
     try:
@@ -31,6 +33,7 @@ def delete_stream(client, log_group_name, log_stream_name):
     except Exception as e:
         logging.error(f"Error deleting stream '{log_stream_name}': {e}")
         return False
+
 
 def main():
     args = parse_args()
@@ -51,7 +54,6 @@ def main():
     logging.info(f"Deleting streams older than: {retention_datetime.isoformat()} UTC")
     logging.info(f"Log group name: {log_group_name}")
     logging.info(f"Log streams older than {args.retention} days will be deleted")
-
     deleted_count = 0
     try:
         page_iterator = paginator.paginate(logGroupName=log_group_name)
@@ -67,6 +69,7 @@ def main():
         sys.exit(1)
 
     logging.info(f"Total streams deleted: {deleted_count}")
+
 
 if __name__ == "__main__":
     main()
