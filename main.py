@@ -43,7 +43,6 @@ def main():
     client = boto3.client("logs", region_name=region)
     paginator = client.get_paginator("describe_log_streams")
 
-    # Use UTC for consistency?
     date_now = datetime.datetime.now(datetime.timezone.utc)
     retention_datetime = date_now - datetime.timedelta(days=args.retention)
     retention_epoch = int(retention_datetime.timestamp() * 1000)  # milliseconds
