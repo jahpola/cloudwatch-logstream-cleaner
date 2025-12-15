@@ -3,8 +3,6 @@ import boto3
 import datetime
 import logging
 import sys
-import os
-from typing import Optional
 from botocore.exceptions import ClientError
 
 
