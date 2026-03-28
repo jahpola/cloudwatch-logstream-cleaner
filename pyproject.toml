@@ -1,12 +1,12 @@
 [project]
 name = "cloudwatch-logstream-cleaner"
 version = "0.1.0"
-description = "Add your description here"
+description = "A utility to delete CloudWatch log streams older than a specified number of days"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
-    "boto3>=1.42.9",
-    "boto3-stubs==1.42.9",
+    "boto3>=1.42.78",
+    "boto3-stubs~=1.42.78",
 ]
 
 [tool.ruff]
@@ -14,6 +14,5 @@ line-length = 120
 
 [dependency-groups]
 dev = [
-    "ruff>=0.14.9",
-    "ty>=0.0.1a34",
+    "ruff>=0.15.8",
 ]
