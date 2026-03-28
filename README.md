@@ -14,7 +14,7 @@ A utility to delete CloudWatch log streams older than a specified number of days
 ## Usage
 
 ```bash
-python main.py -l <log-group-name> -r <retention-days> [options]
+uv run main.py -l <log-group-name> -r <retention-days> [options]
 ```
 
 ### Required Arguments
@@ -36,22 +36,22 @@ python main.py -l <log-group-name> -r <retention-days> [options]
 
 Delete log streams older than 30 days:
 ```bash
-python main.py -l /aws/lambda/my-function -r 30
+uv run main.py -l /aws/lambda/my-function -r 30
 ```
 
 Dry run to see what would be deleted:
 ```bash
-python main.py -l /aws/lambda/my-function -r 30 --dry-run
+uv run main.py -l /aws/lambda/my-function -r 30 --dry-run
 ```
 
 Use last event time instead of creation time:
 ```bash
-python main.py -l /aws/lambda/my-function -r 30 --use-last-event
+uv run main.py -l /aws/lambda/my-function -r 30 --use-last-event
 ```
 
 Skip confirmation prompt:
 ```bash
-python main.py -l /aws/lambda/my-function -r 30 --yes
+uv run main.py -l /aws/lambda/my-function -r 30 --yes
 ```
 
 ## AWS Credentials
@@ -65,5 +65,6 @@ The tool uses boto3 and follows the standard AWS credential resolution:
 
 ## Requirements
 
-- Python 3.6+
+- [uv](https://docs.astral.sh/uv/)
+- Python 3.10+
 - boto3
