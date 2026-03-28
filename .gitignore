@@ -178,3 +178,6 @@ cython_debug/
 
 # VS Code project files
 .vscode/
+
+# Mac
+.DS_Store
