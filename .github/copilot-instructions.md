@@ -123,7 +123,7 @@ The tool relies on boto3's standard credential resolution chain (no credentials 
 ## Code Conventions
 
 - All code is in `main.py`; keep the single-file structure
-- Functions are small and focused; add new behaviour as new functions
+- Functions are small and focused; add new behavior as new functions
 - Logging uses Python's `logging` module (not `print`); boto3/botocore/urllib3 loggers are suppressed to `WARNING` to reduce noise
 - Timestamps from CloudWatch are in **milliseconds** — divide by 1000 before converting to `datetime`
 - Error handling catches `ClientError` and `BotoCoreError` from `botocore.exceptions`; `ThrottlingException` triggers a 2-second sleep and one retry
