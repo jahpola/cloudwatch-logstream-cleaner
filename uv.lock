@@ -64,7 +64,6 @@ dependencies = [
     { name = "boto3" },
     { name = "boto3-stubs" },
     { name = "botocore" },
-    { name = "ruff" },
 ]
 
 [package.dev-dependencies]
@@ -77,7 +76,6 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.43.40" },
     { name = "boto3-stubs", specifier = "~=1.43.40" },
     { name = "botocore", specifier = ">=1.43.40" },
-    { name = "ruff", specifier = ">=0.15.8" },
 ]
 
 [package.metadata.requires-dev]
