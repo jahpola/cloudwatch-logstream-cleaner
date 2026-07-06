@@ -84,12 +84,6 @@ To auto-fix fixable issues:
 uv run ruff check --fix main.py test_main.py
 ```
 
-### Known Pre-existing Lint Warnings
-
-Two pre-existing `F541` (f-string without placeholders) warnings exist in `main.py` (lines 108 and 225). These are in the original code and can be fixed with `--fix`, but they are not introduced by new changes. Do not count them as regressions.
-
----
-
 ## Dependencies
 
 Managed via `uv` with the lockfile `uv.lock`. Update dependencies with:
@@ -101,11 +95,11 @@ uv add --dev <package>     # dev-only dependency
 Do **not** edit `uv.lock` manually.
 
 Runtime dependencies:
-- `boto3>=1.42.78` — AWS SDK
-- `boto3-stubs~=1.42.78` — Type stubs for boto3
+- `boto3>=1.43.40` — AWS SDK
+- `boto3-stubs~=1.43.40` — Type stubs for boto3
 
 Dev dependencies:
-- `ruff>=0.15.8` — Linter
+- `ruff>=0.15.20` — Linter
 - `pytest>=9.1.1` — Test runner
 
 ---
