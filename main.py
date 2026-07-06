@@ -166,19 +166,29 @@ def find_eligible_streams(client, log_group_name, retention_epoch, use_last_even
                 logging.warning(f"Skipping stream '{log_stream.get('logStreamName')}': missing timestamp")
                 continue
             if timestamp < retention_epoch:
+                stream_name = log_stream.get("logStreamName")
+                if not stream_name:
+                    logging.warning("Skipping stream with missing logStreamName")
+                    continue
                 _debug_log_stream(log_stream)
-                eligible_streams.append(log_stream.get("logStreamName"))
+                eligible_streams.append(stream_name)
     return eligible_streams
 
 
 def delete_eligible_streams(client, log_group_name, stream_names, *, dry_run, batch_size, batch_pause):
     """Delete the given streams in order, pausing between batches to ease API pressure."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if batch_pause < 0:
+        raise ValueError("batch_pause must be non-negative")
+
     logging.info(f"Starting deletion of {len(stream_names)} streams...")
     deleted_count = 0
+    total = len(stream_names)
     for i, stream_name in enumerate(stream_names, 1):
         if delete_stream(client, log_group_name, stream_name, dry_run):
             deleted_count += 1
-        if i % batch_size == 0:
+        if batch_pause and i % batch_size == 0 and i < total:
             logging.debug(f"Processed {i} streams, pausing for {batch_pause}s...")
             time.sleep(batch_pause)
     return deleted_count
