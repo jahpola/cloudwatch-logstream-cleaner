@@ -141,48 +141,82 @@ def get_stream_age_timestamp(log_stream, use_last_event=False):
     return None
 
 
-def process_log_streams(client, log_group_name, retention_epoch, args):
-    """Process and delete log streams based on retention policy."""
-    paginator = client.get_paginator("describe_log_streams")
-    deleted_count = 0
+def _debug_log_stream(log_stream):
+    """Emit a per-stream DEBUG line without doing datetime work when DEBUG is off."""
+    if not logging.getLogger().isEnabledFor(logging.DEBUG):
+        return
 
+    def _iso(ms):
+        return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.timezone.utc).isoformat()
+
+    created = _iso(log_stream["creationTime"]) if "creationTime" in log_stream else "N/A"
+    last_event = _iso(log_stream["lastEventTimestamp"]) if "lastEventTimestamp" in log_stream else "N/A"
+    logging.debug(f"Stream: {log_stream.get('logStreamName')}, Created: {created}, Last event: {last_event}")
+
+
+def find_eligible_streams(client, log_group_name, retention_epoch, use_last_event):
+    """Paginate log streams and return names of those older than the retention threshold."""
+    logging.info("Scanning for eligible streams...")
+    paginator = client.get_paginator("describe_log_streams")
+    eligible_streams = []
+    for page in paginator.paginate(logGroupName=log_group_name):
+        for log_stream in page.get("logStreams", []):
+            timestamp = get_stream_age_timestamp(log_stream, use_last_event)
+            if timestamp is None:
+                logging.warning(f"Skipping stream '{log_stream.get('logStreamName')}': missing timestamp")
+                continue
+            if timestamp < retention_epoch:
+                _debug_log_stream(log_stream)
+                eligible_streams.append(log_stream.get("logStreamName"))
+    return eligible_streams
+
+
+def delete_eligible_streams(client, log_group_name, stream_names, *, dry_run, batch_size, batch_pause):
+    """Delete the given streams in order, pausing between batches to ease API pressure."""
+    logging.info(f"Starting deletion of {len(stream_names)} streams...")
+    deleted_count = 0
+    for i, stream_name in enumerate(stream_names, 1):
+        if delete_stream(client, log_group_name, stream_name, dry_run):
+            deleted_count += 1
+        if i % batch_size == 0:
+            logging.debug(f"Processed {i} streams, pausing for {batch_pause}s...")
+            time.sleep(batch_pause)
+    return deleted_count
+
+
+def process_log_streams(
+    client,
+    log_group_name,
+    retention_epoch,
+    *,
+    use_last_event,
+    dry_run,
+    skip_confirmation,
+    retention_days,
+    batch_size,
+    batch_pause,
+):
+    """Orchestrate scan, confirmation, and deletion of expired log streams."""
     try:
-        # Single pass: collect eligible stream names
-        logging.info("Scanning for eligible streams...")
-        eligible_streams = []
-        for page in paginator.paginate(logGroupName=log_group_name):
-            for log_stream in page.get("logStreams", []):
-                timestamp = get_stream_age_timestamp(log_stream, args.use_last_event)
-                if timestamp is None:
-                    logging.warning(f"Skipping stream '{log_stream.get('logStreamName')}': missing timestamp")
-                    continue
-                if timestamp < retention_epoch:
-                    log_stream_name = log_stream.get("logStreamName")
-                    logging.debug(
-                        f"Stream: {log_stream_name}, "
-                        f"Created: {datetime.datetime.fromtimestamp(log_stream['creationTime'] / 1000, tz=datetime.timezone.utc).isoformat() if 'creationTime' in log_stream else 'N/A'}, "
-                        f"Last event: {datetime.datetime.fromtimestamp(log_stream['lastEventTimestamp'] / 1000, tz=datetime.timezone.utc).isoformat() if 'lastEventTimestamp' in log_stream else 'N/A'}"
-                    )
-                    eligible_streams.append(log_stream_name)
+        eligible_streams = find_eligible_streams(client, log_group_name, retention_epoch, use_last_event)
 
         if not eligible_streams:
             logging.info("No streams found that meet the deletion criteria.")
             return 0
 
-        # Confirm before deletion
-        if not args.yes and not args.dry_run:
-            if not confirm_deletion(log_group_name, args.retention, len(eligible_streams)):
+        if not skip_confirmation and not dry_run:
+            if not confirm_deletion(log_group_name, retention_days, len(eligible_streams)):
                 logging.info("Operation cancelled by user.")
                 return 0
 
-        # Delete collected streams
-        logging.info(f"Starting deletion of {len(eligible_streams)} streams...")
-        for i, stream_name in enumerate(eligible_streams, 1):
-            if delete_stream(client, log_group_name, stream_name, args.dry_run):
-                deleted_count += 1
-            if i % args.batch_size == 0:
-                logging.debug(f"Processed {i} streams, pausing for {args.batch_pause}s...")
-                time.sleep(args.batch_pause)
+        return delete_eligible_streams(
+            client,
+            log_group_name,
+            eligible_streams,
+            dry_run=dry_run,
+            batch_size=batch_size,
+            batch_pause=batch_pause,
+        )
 
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "Unknown")
@@ -193,8 +227,6 @@ def process_log_streams(client, log_group_name, retention_epoch, args):
     except (OSError, BotoCoreError) as e:
         logging.exception(f"Failed to process log streams: {e}")
         sys.exit(1)
-
-    return deleted_count
 
 
 def main():
@@ -224,7 +256,17 @@ def main():
         logging.info("DRY RUN MODE: No streams will actually be deleted")
 
     # Process and delete streams
-    deleted_count = process_log_streams(client, log_group_name, retention_epoch, args)
+    deleted_count = process_log_streams(
+        client,
+        log_group_name,
+        retention_epoch,
+        use_last_event=args.use_last_event,
+        dry_run=args.dry_run,
+        skip_confirmation=args.yes,
+        retention_days=args.retention,
+        batch_size=args.batch_size,
+        batch_pause=args.batch_pause,
+    )
 
     # Log summary
     if args.dry_run:
