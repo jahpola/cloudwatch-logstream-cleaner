@@ -311,17 +311,13 @@ class TestCloudWatchLogStreamCleaner(unittest.TestCase):
     def test_find_eligible_streams_filters_by_creation_time(self):
         """find_eligible_streams returns only streams older than the retention epoch"""
         retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
-        result = main.find_eligible_streams(
-            self.mock_client, "test-log-group", retention_epoch, use_last_event=False
-        )
+        result = main.find_eligible_streams(self.mock_client, "test-log-group", retention_epoch, use_last_event=False)
         self.assertEqual(result, ["old-stream"])
 
     def test_find_eligible_streams_filters_by_last_event(self):
         """find_eligible_streams uses lastEventTimestamp when use_last_event is True"""
         retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
-        result = main.find_eligible_streams(
-            self.mock_client, "test-log-group", retention_epoch, use_last_event=True
-        )
+        result = main.find_eligible_streams(self.mock_client, "test-log-group", retention_epoch, use_last_event=True)
         self.assertEqual(result, ["old-stream"])
 
     def test_find_eligible_streams_skips_missing_timestamp(self):
@@ -330,9 +326,7 @@ class TestCloudWatchLogStreamCleaner(unittest.TestCase):
             {"logStreams": [{"logStreamName": "no-ts-stream"}, self.old_stream]}
         ]
         retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
-        result = main.find_eligible_streams(
-            self.mock_client, "test-log-group", retention_epoch, use_last_event=False
-        )
+        result = main.find_eligible_streams(self.mock_client, "test-log-group", retention_epoch, use_last_event=False)
         self.assertEqual(result, ["old-stream"])
 
     @patch("main.delete_stream")
