@@ -2,6 +2,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 import datetime
 
+from botocore.exceptions import ClientError
+
 import main
 
 
@@ -143,6 +145,157 @@ class TestCloudWatchLogStreamCleaner(unittest.TestCase):
 
         self.assertTrue(result)
         self.mock_client.delete_log_stream.assert_not_called()
+
+    def test_get_stream_age_timestamp_missing_creation_time(self):
+        """Test that get_stream_age_timestamp returns None when creationTime is missing"""
+        stream = {"logStreamName": "no-timestamp-stream"}
+        self.assertIsNone(main.get_stream_age_timestamp(stream, use_last_event=False))
+
+    def test_get_stream_age_timestamp_missing_last_event_falls_back_to_none(self):
+        """Test that use_last_event with no lastEventTimestamp and no creationTime returns None"""
+        stream = {"logStreamName": "no-timestamp-stream"}
+        self.assertIsNone(main.get_stream_age_timestamp(stream, use_last_event=True))
+
+    def test_get_stream_age_timestamp_missing_last_event_falls_back_to_creation(self):
+        """Test that use_last_event with no lastEventTimestamp falls back to creationTime"""
+        stream = {"logStreamName": "s", "creationTime": 12345}
+        self.assertEqual(main.get_stream_age_timestamp(stream, use_last_event=True), 12345)
+
+    @patch("main.time.sleep")
+    def test_delete_stream_throttle_retry_then_success(self, mock_sleep):
+        """Test that delete_stream retries on ThrottlingException with exponential backoff"""
+        throttle_error = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}}, "DeleteLogStream"
+        )
+        self.mock_client.delete_log_stream.side_effect = [
+            throttle_error,
+            throttle_error,
+            {"ResponseMetadata": {"RequestId": "ok"}},
+        ]
+
+        result = main.delete_stream(self.mock_client, "test-log-group", "test-stream", False, max_retries=5)
+
+        self.assertTrue(result)
+        self.assertEqual(self.mock_client.delete_log_stream.call_count, 3)
+        mock_sleep.assert_any_call(2)
+        mock_sleep.assert_any_call(4)
+
+    @patch("main.time.sleep")
+    def test_delete_stream_throttle_exhausts_retries(self, mock_sleep):
+        """Test that delete_stream returns False after exhausting retries"""
+        throttle_error = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}}, "DeleteLogStream"
+        )
+        self.mock_client.delete_log_stream.side_effect = throttle_error
+
+        result = main.delete_stream(self.mock_client, "test-log-group", "test-stream", False, max_retries=2)
+
+        self.assertFalse(result)
+        self.assertEqual(self.mock_client.delete_log_stream.call_count, 3)  # initial + 2 retries
+
+    def test_delete_stream_resource_not_found(self):
+        """Test that delete_stream handles ResourceNotFoundException"""
+        self.mock_client.delete_log_stream.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}}, "DeleteLogStream"
+        )
+
+        result = main.delete_stream(self.mock_client, "test-log-group", "test-stream", False)
+        self.assertFalse(result)
+
+    @patch("main.delete_stream")
+    @patch("main.confirm_deletion", return_value=True)
+    def test_process_log_streams_confirmation_accepted(self, mock_confirm, mock_delete_stream):
+        """Test that streams are deleted when user confirms"""
+        mock_delete_stream.return_value = True
+
+        mock_args = MagicMock()
+        mock_args.retention = 30
+        mock_args.use_last_event = False
+        mock_args.dry_run = False
+        mock_args.yes = False
+        mock_args.batch_size = 100
+        mock_args.batch_pause = 0
+
+        retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
+        deleted_count = main.process_log_streams(self.mock_client, "test-log-group", retention_epoch, mock_args)
+
+        self.assertEqual(deleted_count, 1)
+        mock_confirm.assert_called_once_with("test-log-group", 30, 1)
+
+    @patch("main.delete_stream")
+    @patch("main.confirm_deletion", return_value=False)
+    def test_process_log_streams_confirmation_rejected(self, mock_confirm, mock_delete_stream):
+        """Test that no streams are deleted when user rejects confirmation"""
+        mock_args = MagicMock()
+        mock_args.retention = 30
+        mock_args.use_last_event = False
+        mock_args.dry_run = False
+        mock_args.yes = False
+        mock_args.batch_size = 100
+        mock_args.batch_pause = 0
+
+        retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
+        deleted_count = main.process_log_streams(self.mock_client, "test-log-group", retention_epoch, mock_args)
+
+        self.assertEqual(deleted_count, 0)
+        mock_delete_stream.assert_not_called()
+
+    @patch("main.delete_stream")
+    def test_process_log_streams_resource_not_found(self, mock_delete_stream):
+        """Test that process_log_streams exits on ResourceNotFoundException for log group"""
+        self.mock_paginator.paginate.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Log group not found"}},
+            "DescribeLogStreams",
+        )
+
+        mock_args = MagicMock()
+        mock_args.retention = 30
+        mock_args.use_last_event = False
+        mock_args.dry_run = False
+        mock_args.yes = True
+        mock_args.batch_size = 100
+        mock_args.batch_pause = 0
+
+        retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
+
+        with self.assertRaises(SystemExit):
+            main.process_log_streams(self.mock_client, "nonexistent-group", retention_epoch, mock_args)
+
+        mock_delete_stream.assert_not_called()
+
+    @patch("main.delete_stream")
+    def test_process_log_streams_skips_missing_timestamp(self, mock_delete_stream):
+        """Test that streams with missing timestamps are skipped"""
+        mock_delete_stream.return_value = True
+        self.mock_paginator.paginate.return_value = [
+            {"logStreams": [{"logStreamName": "no-ts-stream"}, self.old_stream]}
+        ]
+
+        mock_args = MagicMock()
+        mock_args.retention = 30
+        mock_args.use_last_event = False
+        mock_args.dry_run = False
+        mock_args.yes = True
+        mock_args.batch_size = 100
+        mock_args.batch_pause = 0
+
+        retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)
+        deleted_count = main.process_log_streams(self.mock_client, "test-log-group", retention_epoch, mock_args)
+
+        self.assertEqual(deleted_count, 1)
+        mock_delete_stream.assert_called_once_with(self.mock_client, "test-log-group", "old-stream", False)
+
+    @patch("sys.argv", ["prog", "-l", "test", "-r", "-5"])
+    def test_parse_args_negative_retention(self):
+        """Test that negative retention is rejected"""
+        with self.assertRaises(SystemExit):
+            main.parse_args()
+
+    @patch("sys.argv", ["prog", "-l", "test", "-r", "30", "--batch-size", "0"])
+    def test_parse_args_zero_batch_size(self):
+        """Test that zero batch-size is rejected"""
+        with self.assertRaises(SystemExit):
+            main.parse_args()
 
 
 if __name__ == "__main__":
