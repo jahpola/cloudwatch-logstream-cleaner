@@ -84,7 +84,7 @@ def get_aws_client(service, region=None):
             return boto3.client(service, region_name=region)
         return boto3.client(service)
     except (ClientError, BotoCoreError) as e:
-        logging.error(f"Failed to create AWS {service} client: {e}")
+        logging.exception(f"Failed to create AWS {service} client: {e}")
         sys.exit(1)
 
 
@@ -112,7 +112,7 @@ def delete_stream(client, log_group_name, log_stream_name, dry_run=False, max_re
                 logging.error(f"AWS error deleting stream '{log_stream_name}': {error_code} - {e}")
                 return False
         except (OSError, BotoCoreError) as e:
-            logging.error(f"Unexpected error deleting stream '{log_stream_name}': {e}")
+            logging.exception(f"Unexpected error deleting stream '{log_stream_name}': {e}")
             return False
 
     return False
@@ -186,12 +186,12 @@ def process_log_streams(client, log_group_name, retention_epoch, args):
 
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        logging.error(f"AWS error during stream processing: {error_code} - {e}")
+        logging.exception(f"AWS error during stream processing: {error_code} - {e}")
         if error_code == "ResourceNotFoundException":
             logging.error(f"Log group '{log_group_name}' not found")
         sys.exit(1)
     except (OSError, BotoCoreError) as e:
-        logging.error(f"Failed to process log streams: {e}")
+        logging.exception(f"Failed to process log streams: {e}")
         sys.exit(1)
 
     return deleted_count
