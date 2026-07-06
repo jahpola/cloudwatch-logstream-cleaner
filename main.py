@@ -210,7 +210,7 @@ def main():
     retention_datetime = date_now - datetime.timedelta(days=args.retention)
     retention_epoch = int(retention_datetime.timestamp() * 1000)  # milliseconds
 
-    log_group_name = args.loggroup
+    log_group_name = args.log_group
 
     # Log execution parameters
     logging.info("CloudWatch Log Stream Cleaner")
