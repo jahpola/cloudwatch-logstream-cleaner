@@ -14,7 +14,7 @@ def parse_args():
         prog="cloudwatch-logstream-cleaner",
         description="Delete CloudWatch log streams older than a specified number of days",
     )
-    parser.add_argument("-l", "--loggroup", help="CloudWatch Log Group Name", required=True)
+    parser.add_argument("-l", "--log-group", help="CloudWatch Log Group Name", required=True)
     parser.add_argument("-r", "--retention", type=int, help="Retention in days", required=True)
     parser.add_argument(
         "--verbose",
