@@ -114,7 +114,7 @@ def delete_stream(client, log_group_name, log_stream_name, dry_run=False, max_re
                 logger.warning(f"AWS throttling detected. Retry {attempt + 1}/{max_retries} in {wait_time}s...")
                 time.sleep(wait_time)
             else:
-                logger.exception(f"AWS error deleting stream '{log_stream_name}': {error_code} - {e}")
+                logger.exception(f"AWS error deleting stream '{log_stream_name}': {error_code}")
                 return False
         except (OSError, BotoCoreError):
             logger.exception(f"Unexpected error deleting stream '{log_stream_name}'")
