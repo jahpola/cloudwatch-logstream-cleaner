@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  NODE_VERSION: "24"
-
 jobs:
   lint-and-test:
     name: Lint and test
