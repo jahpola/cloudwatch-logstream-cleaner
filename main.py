@@ -61,6 +61,8 @@ def parse_args():
         parser.error("--retention must be non-negative")
     if args.batch_size <= 0:
         parser.error("--batch-size must be positive")
+    if args.batch_pause < 0:
+        parser.error("--batch-pause must be non-negative")
     return args
 
 

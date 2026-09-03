@@ -308,6 +308,12 @@ class TestCloudWatchLogStreamCleaner(unittest.TestCase):
         with self.assertRaises(SystemExit):
             main.parse_args()
 
+    @patch("sys.argv", ["prog", "-l", "test", "-r", "30", "--batch-pause", "-1"])
+    def test_parse_args_negative_batch_pause(self):
+        """Test that negative batch-pause is rejected"""
+        with self.assertRaises(SystemExit):
+            main.parse_args()
+
     def test_find_eligible_streams_filters_by_creation_time(self):
         """find_eligible_streams returns only streams older than the retention epoch"""
         retention_epoch = int((self.now - datetime.timedelta(days=30)).timestamp() * 1000)

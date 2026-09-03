@@ -15,7 +15,7 @@ main.py           # Single-file CLI entry point — all logic lives here
 test_main.py      # Unit tests (unittest-style, executed via pytest)
 pyproject.toml    # Project metadata, dependencies, and ruff config
 uv.lock           # Locked dependency graph (committed; do not edit manually)
-.python-version   # Pins Python to 3.14
+.python-version   # Pins Python to 3.10
 README.md         # Usage documentation
 ```
 
@@ -35,7 +35,7 @@ Install all dependencies (including dev):
 uv sync --all-groups
 ```
 
-> **Note:** `uv` will automatically download Python 3.14 (pinned in `.python-version`) if it is not already installed.
+> **Note:** `uv` will automatically download Python 3.10 (pinned in `.python-version`) if it is not already installed.
 
 ---
 
@@ -125,9 +125,9 @@ The tool relies on boto3's standard credential resolution chain (no credentials 
 
 ---
 
-## No CI Configured
+## CI
 
-There are no GitHub Actions workflows in this repository. Validation must be run locally using the commands above.
+`.github/workflows/ci.yml` runs on push/PR to `main`: `ruff check`, `ruff format --check`, `pytest`, followed by a SonarCloud scan. Validate locally with the commands above before pushing.
 
 ---
 

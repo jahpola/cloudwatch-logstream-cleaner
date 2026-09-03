@@ -14,12 +14,12 @@ A utility to delete CloudWatch log streams older than a specified number of days
 ## Usage
 
 ```bash
-uv run main.py -l <log-group-name> -r <retention-days> [options]
+uv run python main.py -l <log-group-name> -r <retention-days> [options]
 ```
 
 ### Required Arguments
 
-- `-l, --loggroup`: CloudWatch Log Group Name
+- `-l, --log-group`: CloudWatch Log Group Name
 - `-r, --retention`: Retention period in days
 
 ### Optional Arguments
@@ -36,22 +36,22 @@ uv run main.py -l <log-group-name> -r <retention-days> [options]
 
 Delete log streams older than 30 days:
 ```bash
-uv run main.py -l /aws/lambda/my-function -r 30
+uv run python main.py -l /aws/lambda/my-function -r 30
 ```
 
 Dry run to see what would be deleted:
 ```bash
-uv run main.py -l /aws/lambda/my-function -r 30 --dry-run
+uv run python main.py -l /aws/lambda/my-function -r 30 --dry-run
 ```
 
 Use last event time instead of creation time:
 ```bash
-uv run main.py -l /aws/lambda/my-function -r 30 --use-last-event
+uv run python main.py -l /aws/lambda/my-function -r 30 --use-last-event
 ```
 
 Skip confirmation prompt:
 ```bash
-uv run main.py -l /aws/lambda/my-function -r 30 --yes
+uv run python main.py -l /aws/lambda/my-function -r 30 --yes
 ```
 
 ## AWS Credentials
