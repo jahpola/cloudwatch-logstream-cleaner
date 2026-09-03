@@ -1,11 +1,14 @@
 import argparse
-import boto3
 import datetime
 import logging
-import sys
 import os
+import sys
 import time
-from botocore.exceptions import ClientError, BotoCoreError
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args():
@@ -85,36 +88,36 @@ def get_aws_client(service, region=None):
         if region:
             return boto3.client(service, region_name=region)
         return boto3.client(service)
-    except (ClientError, BotoCoreError) as e:
-        logging.exception(f"Failed to create AWS {service} client: {e}")
+    except (ClientError, BotoCoreError):
+        logger.exception(f"Failed to create AWS {service} client")
         sys.exit(1)
 
 
 def delete_stream(client, log_group_name, log_stream_name, dry_run=False, max_retries=5):
     """Delete a single log stream and log the result."""
     if dry_run:
-        logging.info(f"[DRY RUN] Would delete stream: {log_stream_name}")
+        logger.info(f"[DRY RUN] Would delete stream: {log_stream_name}")
         return True
 
     for attempt in range(max_retries + 1):
         try:
             response = client.delete_log_stream(logGroupName=log_group_name, logStreamName=log_stream_name)
-            logging.debug(f"Deleted stream response: {response}")
+            logger.debug(f"Deleted stream response: {response}")
             return True
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             if error_code == "ResourceNotFoundException":
-                logging.warning(f"Stream '{log_stream_name}' not found (may have been deleted already)")
+                logger.warning(f"Stream '{log_stream_name}' not found (may have been deleted already)")
                 return False
             elif error_code == "ThrottlingException" and attempt < max_retries:
                 wait_time = 2 ** (attempt + 1)
-                logging.warning(f"AWS throttling detected. Retry {attempt + 1}/{max_retries} in {wait_time}s...")
+                logger.warning(f"AWS throttling detected. Retry {attempt + 1}/{max_retries} in {wait_time}s...")
                 time.sleep(wait_time)
             else:
-                logging.error(f"AWS error deleting stream '{log_stream_name}': {error_code} - {e}")
+                logger.error(f"AWS error deleting stream '{log_stream_name}': {error_code} - {e}")
                 return False
-        except (OSError, BotoCoreError) as e:
-            logging.exception(f"Unexpected error deleting stream '{log_stream_name}': {e}")
+        except (OSError, BotoCoreError):
+            logger.exception(f"Unexpected error deleting stream '{log_stream_name}'")
             return False
 
     return False
@@ -145,7 +148,7 @@ def get_stream_age_timestamp(log_stream, use_last_event=False):
 
 def _debug_log_stream(log_stream):
     """Emit a per-stream DEBUG line without doing datetime work when DEBUG is off."""
-    if not logging.getLogger().isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.DEBUG):
         return
 
     def _iso(ms):
@@ -153,24 +156,24 @@ def _debug_log_stream(log_stream):
 
     created = _iso(log_stream["creationTime"]) if "creationTime" in log_stream else "N/A"
     last_event = _iso(log_stream["lastEventTimestamp"]) if "lastEventTimestamp" in log_stream else "N/A"
-    logging.debug(f"Stream: {log_stream.get('logStreamName')}, Created: {created}, Last event: {last_event}")
+    logger.debug(f"Stream: {log_stream.get('logStreamName')}, Created: {created}, Last event: {last_event}")
 
 
 def find_eligible_streams(client, log_group_name, retention_epoch, use_last_event):
     """Paginate log streams and return names of those older than the retention threshold."""
-    logging.info("Scanning for eligible streams...")
+    logger.info("Scanning for eligible streams...")
     paginator = client.get_paginator("describe_log_streams")
     eligible_streams = []
     for page in paginator.paginate(logGroupName=log_group_name):
         for log_stream in page.get("logStreams", []):
             timestamp = get_stream_age_timestamp(log_stream, use_last_event)
             if timestamp is None:
-                logging.warning(f"Skipping stream '{log_stream.get('logStreamName')}': missing timestamp")
+                logger.warning(f"Skipping stream '{log_stream.get('logStreamName')}': missing timestamp")
                 continue
             if timestamp < retention_epoch:
                 stream_name = log_stream.get("logStreamName")
                 if not stream_name:
-                    logging.warning("Skipping stream with missing logStreamName")
+                    logger.warning("Skipping stream with missing logStreamName")
                     continue
                 _debug_log_stream(log_stream)
                 eligible_streams.append(stream_name)
@@ -184,14 +187,14 @@ def delete_eligible_streams(client, log_group_name, stream_names, *, dry_run, ba
     if batch_pause < 0:
         raise ValueError("batch_pause must be non-negative")
 
-    logging.info(f"Starting deletion of {len(stream_names)} streams...")
+    logger.info(f"Starting deletion of {len(stream_names)} streams...")
     deleted_count = 0
     total = len(stream_names)
     for i, stream_name in enumerate(stream_names, 1):
         if delete_stream(client, log_group_name, stream_name, dry_run):
             deleted_count += 1
         if batch_pause and i % batch_size == 0 and i < total:
-            logging.debug(f"Processed {i} streams, pausing for {batch_pause}s...")
+            logger.debug(f"Processed {i} streams, pausing for {batch_pause}s...")
             time.sleep(batch_pause)
     return deleted_count
 
@@ -213,13 +216,16 @@ def process_log_streams(
         eligible_streams = find_eligible_streams(client, log_group_name, retention_epoch, use_last_event)
 
         if not eligible_streams:
-            logging.info("No streams found that meet the deletion criteria.")
+            logger.info("No streams found that meet the deletion criteria.")
             return 0
 
-        if not skip_confirmation and not dry_run:
-            if not confirm_deletion(log_group_name, retention_days, len(eligible_streams)):
-                logging.info("Operation cancelled by user.")
-                return 0
+        if (
+            not skip_confirmation
+            and not dry_run
+            and not confirm_deletion(log_group_name, retention_days, len(eligible_streams))
+        ):
+            logger.info("Operation cancelled by user.")
+            return 0
 
         return delete_eligible_streams(
             client,
@@ -232,12 +238,12 @@ def process_log_streams(
 
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        logging.exception(f"AWS error during stream processing: {error_code} - {e}")
+        logger.exception(f"AWS error during stream processing: {error_code}")
         if error_code == "ResourceNotFoundException":
-            logging.error(f"Log group '{log_group_name}' not found")
+            logger.error(f"Log group '{log_group_name}' not found")
         sys.exit(1)
-    except (OSError, BotoCoreError) as e:
-        logging.exception(f"Failed to process log streams: {e}")
+    except (OSError, BotoCoreError):
+        logger.exception("Failed to process log streams")
         sys.exit(1)
 
 
@@ -257,15 +263,15 @@ def main():
     log_group_name = args.log_group
 
     # Log execution parameters
-    logging.info("CloudWatch Log Stream Cleaner")
-    logging.info(f"Using AWS region: {region or 'default'}")
-    logging.info(f"Log group name: {log_group_name}")
-    logging.info(f"Retention threshold: {retention_datetime.isoformat()} UTC")
-    logging.info(f"Log streams older than {args.retention} days will be deleted")
-    logging.info(f"Using {'lastEventTimestamp' if args.use_last_event else 'creationTime'} for age calculation")
+    logger.info("CloudWatch Log Stream Cleaner")
+    logger.info(f"Using AWS region: {region or 'default'}")
+    logger.info(f"Log group name: {log_group_name}")
+    logger.info(f"Retention threshold: {retention_datetime.isoformat()} UTC")
+    logger.info(f"Log streams older than {args.retention} days will be deleted")
+    logger.info(f"Using {'lastEventTimestamp' if args.use_last_event else 'creationTime'} for age calculation")
 
     if args.dry_run:
-        logging.info("DRY RUN MODE: No streams will actually be deleted")
+        logger.info("DRY RUN MODE: No streams will actually be deleted")
 
     # Process and delete streams
     deleted_count = process_log_streams(
@@ -282,9 +288,9 @@ def main():
 
     # Log summary
     if args.dry_run:
-        logging.info(f"DRY RUN COMPLETE: {deleted_count} streams would have been deleted")
+        logger.info(f"DRY RUN COMPLETE: {deleted_count} streams would have been deleted")
     else:
-        logging.info(f"Operation complete: {deleted_count} streams deleted")
+        logger.info(f"Operation complete: {deleted_count} streams deleted")
 
 
 if __name__ == "__main__":
