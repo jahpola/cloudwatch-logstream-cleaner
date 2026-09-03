@@ -1,6 +1,6 @@
-import unittest
-from unittest.mock import patch, MagicMock
 import datetime
+import unittest
+from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
