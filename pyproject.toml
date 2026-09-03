@@ -17,4 +17,5 @@ line-length = 120
 dev = [
     "ruff>=0.15.20",
     "pytest>=9.1.1",
+    "pytest-cov>=7.0.0",
 ]
