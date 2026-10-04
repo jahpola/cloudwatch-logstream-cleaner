@@ -95,12 +95,14 @@ uv add --dev <package>     # dev-only dependency
 Do **not** edit `uv.lock` manually.
 
 Runtime dependencies:
-- `boto3>=1.43.40` — AWS SDK
-- `boto3-stubs~=1.43.40` — Type stubs for boto3
+- `boto3==1.43.108` — AWS SDK
+- `boto3-stubs==1.43.108` — Type stubs for boto3
+- `botocore==1.43.108` — AWS SDK core
 
 Dev dependencies:
-- `ruff>=0.15.20` — Linter
-- `pytest>=9.1.1` — Test runner
+- `ruff==0.16.10` — Linter
+- `pytest==9.1.1` — Test runner
+- `pytest-cov==7.1.0` — Test coverage plugin
 
 ---
 
